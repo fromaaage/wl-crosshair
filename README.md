@@ -15,7 +15,7 @@ wl-crosshair ./my-crosshair.png
 
 ## TODO
 - [x] Make the crosshair Click-through https://github.com/lelgenio/wl-crosshair/pull/1
-- [ ] Option to control size of crosshair
+- [x] Option to control size of crosshair
 - [x] Option to offset crosshair
 - [ ] Configuration file
 - [x] Support for loading custom crosshair images
