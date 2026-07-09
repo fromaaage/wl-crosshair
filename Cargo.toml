@@ -12,3 +12,5 @@ wayland-protocols-wlr = { version = "0.1.0", features = ["client"] }
 log = { version = "0.4", optional = true }
 tempfile = "3.2"
 image = "0.25.1"
+serde = { version = "1.0", features = ["derive"] }
+toml = "0.8"

@@ -7,6 +7,31 @@ A extremely stripped down version of [crossover](https://github.com/lacymorrow/c
 wl-crosshair ./my-crosshair.png
 ```
 
+## Install
+
+```sh
+cargo build --release
+mkdir -p ~/.local/bin
+cp target/release/wl-crosshair ~/.local/bin/wl-crosshair
+```
+
+Make sure `~/.local/bin` is in your `PATH` (`echo $PATH`). Afterwards
+`wl-crosshair` can be run from anywhere, and (combined with a config file,
+see below) needs no arguments at all.
+
+## Configuration
+
+Instead of passing flags every time, settings can live in a config file so
+`wl-crosshair` can be started with no arguments at all (e.g. from a
+compositor's `exec`/autostart). The first path found wins:
+
+- `$WL_CROSSHAIR_CONFIG` (explicit override)
+- `$XDG_CONFIG_HOME/wl-crosshair/config.toml`
+- `~/.config/wl-crosshair/config.toml`
+
+See [`config.example.toml`](./config.example.toml) for the available fields.
+Any CLI flag passed at startup overrides the corresponding config value.
+
 ### Preview (default cursor):
 ![image](https://github.com/lelgenio/wl-crosshair/assets/31388299/6e0aaa16-837b-40a8-9a13-ed808ea5db86)
 
@@ -17,7 +42,7 @@ wl-crosshair ./my-crosshair.png
 - [x] Make the crosshair Click-through https://github.com/lelgenio/wl-crosshair/pull/1
 - [x] Option to control size of crosshair
 - [x] Option to offset crosshair
-- [ ] Configuration file
+- [x] Configuration file
 - [x] Support for loading custom crosshair images
 
 

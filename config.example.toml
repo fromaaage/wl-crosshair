@@ -1,0 +1,37 @@
+# Example configuration for wl-crosshair.
+#
+# Copy this file to one of the following paths (the first one found is
+# used):
+#   - $WL_CROSSHAIR_CONFIG (explicit path, e.g. via environment variable)
+#   - $XDG_CONFIG_HOME/wl-crosshair/config.toml
+#   - ~/.config/wl-crosshair/config.toml
+#
+# All fields are optional. A CLI argument passed at startup always
+# overrides the value set here for that one field (the remaining fields
+# are still read from this file). If a field is missing here AND not
+# passed via CLI, its fallback applies (see below), or the program exits
+# with an error if the field is required.
+
+# Path to the crosshair image (PNG, JPG, ... anything the `image` crate
+# reads). Optional. Fallback order if not set here or via CLI:
+#   1. environment variable WL_CROSSHAIR_IMAGE_PATH
+#   2. path baked in at compile time (if set)
+#   3. ./cursors/inverse-v.png, if that file exists
+# If no valid path is found at the end, the program exits with an error.
+image_path = "/home/user/.config/wl-crosshair/dot.png"
+
+# Screen resolution in pixels, e.g. get it via `swaymsg -t get_outputs`.
+# Both values are REQUIRED (here or via --screen-width/--screen-height) —
+# there is no automatic detection of the output size.
+screen_width = 1920
+screen_height = 1080
+
+# Offset of the crosshair from the screen center, in pixels.
+# positive = right/down, negative = left/up.
+# Optional, defaults to 0 if omitted.
+offset_x = 0
+offset_y = 0
+
+# Resize the image to size x size pixels (Lanczos3). Optional — leave
+# out/commented out to use the image's original size.
+# size = 24

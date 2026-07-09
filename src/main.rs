@@ -1,6 +1,7 @@
-use std::{fs::File, io::Write, os::unix::prelude::AsRawFd};
+use std::{fs::File, io::Write, os::unix::prelude::AsRawFd, path::PathBuf};
 
 use image::{GenericImageView, Pixel};
+use serde::Deserialize;
 use wayland_client::{
     protocol::{
         wl_buffer, wl_compositor, wl_keyboard, wl_region::WlRegion, wl_registry, wl_seat, wl_shm,
@@ -37,9 +38,10 @@ struct State {
 
 fn print_help_and_exit() -> ! {
     eprintln!(
-        "Usage: wl-crosshair [OPTIONS] <image-path>
+        "Usage: wl-crosshair [OPTIONS] [image-path]
 
-        Options:
+        Options are read from a config file first, then overridden by any
+        of these flags:
         --screen-width <px>   Width of the target screen in pixels
         --screen-height <px>  Height of the target screen in pixels
         --offset-x <px>       Horizontal offset from center, positive = right, negative = left
@@ -47,41 +49,78 @@ fn print_help_and_exit() -> ! {
         --size <px>           Resize image to a square size x size
         -h, --help            Show this help
 
+        Config file location (first one found is used):
+        - $WL_CROSSHAIR_CONFIG (explicit path override)
+        - $XDG_CONFIG_HOME/wl-crosshair/config.toml
+        - ~/.config/wl-crosshair/config.toml
+        See config.example.toml for the file format.
+
         Example:
         ./wl-crosshair --screen-width 1920 --screen-height 1080 --size 24 ./dot.png"
     );
     std::process::exit(0);
 }
 
-fn parse_args() -> (String, i32, i32, Option<u32>, u32, u32) {
-    let mut args = std::env::args().skip(1).peekable();
+#[derive(Debug, Default, Deserialize)]
+struct Config {
+    image_path: Option<String>,
+    offset_x: Option<i32>,
+    offset_y: Option<i32>,
+    size: Option<u32>,
+    screen_width: Option<u32>,
+    screen_height: Option<u32>,
+}
 
-    let mut image_path: Option<String> = None;
-    let mut offset_x: i32 = 0;
-    let mut offset_y: i32 = 0;
-    let mut forced_size: Option<u32> = None;
-    let mut screen_width: Option<u32> = None;
-    let mut screen_height: Option<u32> = None;
+fn config_path() -> Option<PathBuf> {
+    if let Ok(path) = std::env::var("WL_CROSSHAIR_CONFIG") {
+        return Some(PathBuf::from(path));
+    }
+    if let Ok(xdg_config_home) = std::env::var("XDG_CONFIG_HOME") {
+        return Some(PathBuf::from(xdg_config_home).join("wl-crosshair/config.toml"));
+    }
+    std::env::var("HOME")
+    .ok()
+    .map(|home| PathBuf::from(home).join(".config/wl-crosshair/config.toml"))
+}
+
+fn load_config() -> Config {
+    let Some(path) = config_path() else {
+        return Config::default();
+    };
+
+    match std::fs::read_to_string(&path) {
+        Ok(contents) => toml::from_str(&contents)
+        .unwrap_or_else(|e| panic!("Invalid config file '{}': {e}", path.display())),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Config::default(),
+        Err(e) => panic!("Could not read config file '{}': {e}", path.display()),
+    }
+}
+
+fn parse_cli_args() -> Config {
+    let mut args = std::env::args().skip(1).peekable();
+    let mut cli = Config::default();
 
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "-h" | "--help" => print_help_and_exit(),
             "--offset-x" => {
-                offset_x = args
-                .next()
-                .expect("Missing value for --offset-x")
-                .parse::<i32>()
-                .expect("Invalid integer for --offset-x");
+                cli.offset_x = Some(
+                    args.next()
+                    .expect("Missing value for --offset-x")
+                    .parse::<i32>()
+                    .expect("Invalid integer for --offset-x"),
+                );
             }
             "--offset-y" => {
-                offset_y = args
-                .next()
-                .expect("Missing value for --offset-y")
-                .parse::<i32>()
-                .expect("Invalid integer for --offset-y");
+                cli.offset_y = Some(
+                    args.next()
+                    .expect("Missing value for --offset-y")
+                    .parse::<i32>()
+                    .expect("Invalid integer for --offset-y"),
+                );
             }
             "--size" => {
-                forced_size = Some(
+                cli.size = Some(
                     args.next()
                     .expect("Missing value for --size")
                     .parse::<u32>()
@@ -89,7 +128,7 @@ fn parse_args() -> (String, i32, i32, Option<u32>, u32, u32) {
                 );
             }
             "--screen-width" => {
-                screen_width = Some(
+                cli.screen_width = Some(
                     args.next()
                     .expect("Missing value for --screen-width")
                     .parse::<u32>()
@@ -97,7 +136,7 @@ fn parse_args() -> (String, i32, i32, Option<u32>, u32, u32) {
                 );
             }
             "--screen-height" => {
-                screen_height = Some(
+                cli.screen_height = Some(
                     args.next()
                     .expect("Missing value for --screen-height")
                     .parse::<u32>()
@@ -105,31 +144,35 @@ fn parse_args() -> (String, i32, i32, Option<u32>, u32, u32) {
                 );
             }
             _ if arg.starts_with("--offset-x=") => {
-                offset_x = arg["--offset-x=".len()..]
-                .parse::<i32>()
-                .expect("Invalid integer for --offset-x");
+                cli.offset_x = Some(
+                    arg["--offset-x=".len()..]
+                    .parse::<i32>()
+                    .expect("Invalid integer for --offset-x"),
+                );
             }
             _ if arg.starts_with("--offset-y=") => {
-                offset_y = arg["--offset-y=".len()..]
-                .parse::<i32>()
-                .expect("Invalid integer for --offset-y");
+                cli.offset_y = Some(
+                    arg["--offset-y=".len()..]
+                    .parse::<i32>()
+                    .expect("Invalid integer for --offset-y"),
+                );
             }
             _ if arg.starts_with("--size=") => {
-                forced_size = Some(
+                cli.size = Some(
                     arg["--size=".len()..]
                     .parse::<u32>()
                     .expect("Invalid integer for --size"),
                 );
             }
             _ if arg.starts_with("--screen-width=") => {
-                screen_width = Some(
+                cli.screen_width = Some(
                     arg["--screen-width=".len()..]
                     .parse::<u32>()
                     .expect("Invalid integer for --screen-width"),
                 );
             }
             _ if arg.starts_with("--screen-height=") => {
-                screen_height = Some(
+                cli.screen_height = Some(
                     arg["--screen-height=".len()..]
                     .parse::<u32>()
                     .expect("Invalid integer for --screen-height"),
@@ -139,8 +182,8 @@ fn parse_args() -> (String, i32, i32, Option<u32>, u32, u32) {
                 panic!("Unknown option: {arg}");
             }
             _ => {
-                if image_path.is_none() {
-                    image_path = Some(arg);
+                if cli.image_path.is_none() {
+                    cli.image_path = Some(arg);
                 } else {
                     panic!("Unexpected extra positional argument: {arg}");
                 }
@@ -148,7 +191,13 @@ fn parse_args() -> (String, i32, i32, Option<u32>, u32, u32) {
         }
     }
 
-    let image_path = image_path
+    cli
+}
+
+fn resolve_settings(cli: Config, file: Config) -> (String, i32, i32, Option<u32>, u32, u32) {
+    let image_path = cli
+    .image_path
+    .or(file.image_path)
     .or_else(|| std::env::var("WL_CROSSHAIR_IMAGE_PATH").ok())
     .or_else(|| {
         [
@@ -160,19 +209,28 @@ fn parse_args() -> (String, i32, i32, Option<u32>, u32, u32) {
         .find(|p| std::fs::metadata(p).map(|m| m.is_file()).unwrap_or(false))
     })
     .expect(
-        "Could not find a crosshair image, pass it as a cli argument or set WL_CROSSHAIR_IMAGE_PATH",
+        "Could not find a crosshair image, pass it as a cli argument, set image_path in the config file, or set WL_CROSSHAIR_IMAGE_PATH",
     );
 
-    let screen_width =
-    screen_width.expect("Missing --screen-width, e.g. --screen-width 1920");
-    let screen_height =
-    screen_height.expect("Missing --screen-height, e.g. --screen-height 1080");
+    let offset_x = cli.offset_x.or(file.offset_x).unwrap_or(0);
+    let offset_y = cli.offset_y.or(file.offset_y).unwrap_or(0);
+    let forced_size = cli.size.or(file.size);
+
+    let screen_width = cli.screen_width.or(file.screen_width).expect(
+        "Missing screen width: pass --screen-width, or set screen_width in the config file",
+    );
+    let screen_height = cli.screen_height.or(file.screen_height).expect(
+        "Missing screen height: pass --screen-height, or set screen_height in the config file",
+    );
 
     (image_path, offset_x, offset_y, forced_size, screen_width, screen_height)
 }
 
 fn main() {
-    let (image_path, offset_x, offset_y, forced_size, screen_width, screen_height) = parse_args();
+    let cli = parse_cli_args();
+    let file_config = load_config();
+    let (image_path, offset_x, offset_y, forced_size, screen_width, screen_height) =
+    resolve_settings(cli, file_config);
 
     let conn = Connection::connect_to_env().unwrap();
 
