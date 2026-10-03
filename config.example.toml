@@ -1,37 +1,26 @@
 # Example configuration for wl-crosshair.
 #
-# Copy this file to one of the following paths (the first one found is
-# used):
-#   - $WL_CROSSHAIR_CONFIG (explicit path, e.g. via environment variable)
+# Copy this file to one of these paths (the first one found is used):
+#   - $WL_CROSSHAIR_CONFIG (explicit path)
 #   - $XDG_CONFIG_HOME/wl-crosshair/config.toml
 #   - ~/.config/wl-crosshair/config.toml
 #
-# All fields are optional. A CLI argument passed at startup always
-# overrides the value set here for that one field (the remaining fields
-# are still read from this file). If a field is missing here AND not
-# passed via CLI, its fallback applies (see below), or the program exits
-# with an error if the field is required.
+# All keys are optional. A CLI flag overrides the matching key for that run.
+# Unknown keys are rejected, so a typo is reported instead of silently ignored.
 
-# Path to the crosshair image (PNG, JPG, ... anything the `image` crate
-# reads). Optional. Fallback order if not set here or via CLI:
+# Path to the crosshair image (PNG, JPG, …). Transparency is supported.
+# Fallback if not set here or on the command line:
 #   1. environment variable WL_CROSSHAIR_IMAGE_PATH
-#   2. path baked in at compile time (if set)
-#   3. ./cursors/inverse-v.png, if that file exists
-# If no valid path is found at the end, the program exits with an error.
+#   2. ./cursors/inverse-v.png
 image_path = "/home/user/.config/wl-crosshair/dot.png"
 
-# Screen resolution in pixels, e.g. get it via `swaymsg -t get_outputs`.
-# Both values are REQUIRED (here or via --screen-width/--screen-height) —
-# there is no automatic detection of the output size.
-screen_width = 1920
-screen_height = 1080
+# Resize the image to size x size pixels. Leave out to keep the original size.
+# size = 24
 
-# Offset of the crosshair from the screen center, in pixels.
-# positive = right/down, negative = left/up.
-# Optional, defaults to 0 if omitted.
+# Offset from the screen center in pixels.
+# positive = right / down, negative = left / up. Default: 0
 offset_x = 0
 offset_y = 0
 
-# Resize the image to size x size pixels (Lanczos3). Optional — leave
-# out/commented out to use the image's original size.
-# size = 24
+# The crosshair is centered automatically – screen_width / screen_height
+# from older versions are no longer needed (still accepted, but ignored).

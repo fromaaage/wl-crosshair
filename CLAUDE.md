@@ -12,11 +12,12 @@ This project can be built either with plain Cargo or via the Nix flake (`use_fla
 
 ```sh
 cargo build --release
-cargo run -- --screen-width 1920 --screen-height 1080 ./dot.png
+cargo run -- --size 24 --offset-y 100 ./dot.png
+cargo test        # unit tests for the image/frame rendering
 cargo fmt
 ```
 
-There is no test suite. There is no `cargo clippy`/CI config in this repo — validate changes by building and running against a live Wayland compositor.
+Wayland behaviour itself is not covered by tests – validate by running against a live compositor.
 
 Nix:
 ```sh
@@ -25,27 +26,26 @@ nix run        # build + run
 nix develop    # enter dev shell with cargo/rustc/rustfmt
 ```
 
-The Nix package wraps the binary with `WL_CROSSHAIR_IMAGE_PATH` set to the bundled `cursors/inverse-v.png`, so the default image is only guaranteed to resolve when run through the Nix app/package.
+The Nix package wraps the binary with `WL_CROSSHAIR_IMAGE_PATH` set to the bundled `cursors/inverse-v.png`.
 
 ## Runtime requirements
 
-Must be run inside a Wayland session on a compositor implementing `wlr-layer-shell-unstable-v1`. Originally assumed to be wlroots-only (sway, Hyprland, ...) and not to work on GNOME/KDE — but confirmed working on at least one KDE Plasma/KWin Wayland session, so treat that as compositor/version-dependent rather than a hard KDE exclusion. `screen_width`/`screen_height` are required (config file or `--screen-width`/`--screen-height`) — there's no protocol call to auto-detect output size, so the caller must supply it (e.g. from `swaymsg`, or the resolution shown in system display settings).
+Must run inside a Wayland session on a compositor implementing `wlr-layer-shell-unstable-v1` (wlroots compositors, KDE Plasma/KWin; not GNOME). No screen size is needed: the layer surface is not anchored, so the compositor centers it on the output.
 
 ## Architecture
 
-Everything happens in `src/main.rs` via a single `State` struct and the `wayland-client` `Dispatch` pattern:
+Everything lives in `src/main.rs`:
 
-1. **Config + arg parsing** — settings (`image_path`, `offset_x/y`, `size`, `screen_width/height`) can come from a TOML config file and/or CLI flags; CLI always wins. `parse_cli_args` is a hand-rolled parser (no `clap`) that fills a `Config` struct (all fields `Option`, `#[derive(Deserialize)]` so the same struct doubles as the TOML shape). `load_config` reads the file from `$WL_CROSSHAIR_CONFIG`, else `$XDG_CONFIG_HOME/wl-crosshair/config.toml`, else `~/.config/wl-crosshair/config.toml` (missing file is not an error — a malformed one is, and panics with the path). `resolve_settings` merges CLI over file over defaults, and is where the image-path fallback chain (`WL_CROSSHAIR_IMAGE_PATH` env var → compile-time `option_env!` default → `cursors/inverse-v.png` on disk) and the required `screen_width`/`screen_height` checks live. Missing required settings or bad parses are a hard `panic!` — this CLI intentionally fails fast/loud rather than validating gracefully. See `config.example.toml` for the file format.
+1. **`run()`** – all errors are `Result<_, String>` and end up as one `wl-crosshair: <message>` line with exit code 1. No panics for user errors.
+2. **Config + args** – `Config` (all `Option`, `#[serde(deny_unknown_fields)]`) is both the TOML shape and the CLI collector. `parse_cli_args` is hand-rolled (no `clap`), accepts `--flag value` and `--flag=value`. `resolve_settings` merges CLI over file over defaults into `Settings`, including the image-path fallback chain. `screen_width`/`screen_height` are still accepted for old configs but ignored (with a note on stderr).
+3. **`render()`** – loads the image (optional Lanczos3 resize to `size`), then places it in a transparent frame of size `image + 2·|offset|` per axis, so the frame center is the screen center and the image sits `offset` away from it. Pixels are premultiplied ARGB8888, little endian. Done before connecting to Wayland so image errors fail early.
+4. **Wayland setup** – one `roundtrip` to collect globals (`wl_compositor`, `wl_shm`, `zwlr_layer_shell_v1`, bound with `min(advertised, supported)` version), then: shm buffer from a `tempfile`, layer surface on `Layer::Overlay` **without anchor** (= centered) and **exclusive zone -1** (ignore panels → true screen center), empty input region (click-through), no keyboard interactivity.
+5. **Main loop** – `blocking_dispatch` until the layer surface gets `Closed`. On `Configure`: ack, attach buffer, commit.
 
-2. **Wayland registry binding** — `Dispatch<wl_registry::WlRegistry, ()>` binds four globals as they're advertised: `zwlr_layer_shell_v1` (the overlay mechanism), `wl_compositor` (to create the surface), `wl_shm` (shared-memory buffer for the pixel data — this is where `State::draw` is invoked into a `tempfile`), and `xdg_wm_base`. All other Wayland object types get a no-op logging `Dispatch` impl via the `impl_dispatch_log!` macro at the bottom of the file — extend that macro list if you bind a new protocol object and just need visibility into its events.
-
-3. **`State::draw`** — loads the image via the `image` crate, optionally resizes it (`--size`, Lanczos3), and writes it into the shm buffer as premultiplied-looking ARGB8888 (converts each pixel's RGBA to a big-endian-packed `u32` then writes little-endian bytes).
-
-4. **`State::init_layer_surface`** — only runs once both `layer_shell` and `wm_base` globals have been seen after the first `blocking_dispatch`. Computes the surface's pixel position from `screen_width`/`screen_height`, the image's own size, and the `--offset-x/y` args, then anchors the layer surface top-left and uses `set_margin` to position it (there's no top-level positioning API in `wlr-layer-shell`, so margins from a top-left anchor are the positioning mechanism). Sets an empty input region so the overlay is click-through. Panics if the computed position would be negative (usually means wrong `--screen-width/height`).
-
-5. **Main loop** — a single `event_queue.blocking_dispatch` loop; `state.running` flips to `false` on `zwlr_layer_surface_v1::Event::Closed`, which ends the program.
+Debug output goes through the `debug!` macro and only prints with `--verbose`. Objects whose events are irrelevant use `impl_dispatch_log!`.
 
 ## Conventions
 
-- No `unwrap`-avoidance discipline here by design — bad CLI input or an unexpected protocol state is expected to panic with a descriptive message rather than be handled gracefully.
-- Keep new Wayland protocol object types wired through the `impl_dispatch_log!` macro unless they need real event handling, to keep `main.rs` from growing boilerplate `Dispatch` impls.
+- User-facing errors: return `Err(String)` with a clear English message, never `panic!`/`expect` on user input.
+- New Wayland objects without real event handling go into the `impl_dispatch_log!` list.
+- Keep it a single small file; avoid heavy dependencies.

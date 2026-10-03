@@ -1379,15 +1379,13 @@ dependencies = [
 
 [[package]]
 name = "wl-crosshair"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "image",
- "log",
  "serde",
  "tempfile",
  "toml",
  "wayland-client",
- "wayland-protocols",
  "wayland-protocols-wlr",
 ]
 

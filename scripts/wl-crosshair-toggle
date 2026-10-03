@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Shows the crosshair if it is hidden, hides it if it is shown.
+# Bind this script to a keyboard shortcut in your desktop settings.
+if pkill -x wl-crosshair; then
+  exit 0
+fi
+setsid -f wl-crosshair "$@" >/dev/null 2>&1

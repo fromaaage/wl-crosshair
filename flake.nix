@@ -16,7 +16,7 @@
           default = self.packages.${system}.wl-crosshair;
           wl-crosshair = pkgs.rustPlatform.buildRustPackage {
             pname = "wl-crosshair";
-            version = "0.1.0";
+            version = "0.2.0";
             src = ./.;
             cargoLock.lockFile = ./Cargo.lock;
             nativeBuildInputs = with pkgs; [ makeWrapper ];
