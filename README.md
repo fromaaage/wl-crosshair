@@ -23,10 +23,10 @@ Or with Nix: `nix run github:fromaaage/wl-crosshair`
 image_path = "/home/you/.config/wl-crosshair/dot.png"
 size = 24        # optional, resize to 24x24
 offset_x = 0     # optional, + right / - left
-offset_y = 145   # optional, + down / - up
+offset_y = 0     # optional, + down / - up
 ```
 
-Every key also works as a flag, for example `--size 24`, `--offset-y 145` or a path to the image. Flags override the config file. Run `wl-crosshair --help` for all options.
+Every key also works as a flag, for example `--size 24`, `--offset-y 100` or a path to the image. Flags override the config file. Run `wl-crosshair --help` for all options.
 
 ## Toggle with a hotkey
 

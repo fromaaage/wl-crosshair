@@ -51,7 +51,7 @@ Config file (first one found is used):
   ~/.config/wl-crosshair/config.toml
 
 Example:
-  wl-crosshair --size 24 --offset-y 145 ~/.config/wl-crosshair/dot.png";
+  wl-crosshair --size 24 --offset-y 100 ~/.config/wl-crosshair/dot.png";
 
 /// Shape of the config file; also used to collect CLI flags.
 #[derive(Debug, Default, Deserialize)]
